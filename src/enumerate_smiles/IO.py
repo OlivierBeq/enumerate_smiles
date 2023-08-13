@@ -89,7 +89,7 @@ class ForwardSmilesMolSupplier:
         self.sanitize = sanitize
         self._buffer_size = 32768  # 32kB
         self._buffer = b''
-        self._mol_delimiter = '\n'
+        self._mol_delimiter = b'\n'
         if isinstance(fileobj, str):
             self._open_supplier = True
             self.supplier = None
@@ -118,7 +118,7 @@ class ForwardSmilesMolSupplier:
                 else:
                     if len(self._buffer):
                         block = BlockLogs() # Disable logger if no name column
-                        mol = next(SmilesMolSupplierFromText(self._buffer, self._mol_delimiter, self.smilesColumn,
+                        mol = next(SmilesMolSupplierFromText(self._buffer, self.delimiter, self.smilesColumn,
                                                              self.nameColumn, False, self.sanitize))
                         del block  # Disable logger if no name column
                         yield mol
@@ -126,7 +126,7 @@ class ForwardSmilesMolSupplier:
             else:
                 block = BlockLogs() # Disable logger if no name column
                 mol = next(
-                    SmilesMolSupplierFromText(self._buffer[:i_seps[0] + len(self._mol_delimiter)], self._mol_delimiter,
+                    SmilesMolSupplierFromText(self._buffer[:i_seps[0] + len(self._mol_delimiter)], self.delimiter,
                                               self.smilesColumn, self.nameColumn, False, self.sanitize))
                 del block  # Disable logger if no name column
                 yield mol
