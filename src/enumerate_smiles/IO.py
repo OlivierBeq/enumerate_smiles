@@ -8,9 +8,9 @@ import re
 from typing import Iterable, Optional, Tuple, Callable, Union
 
 from rdkit import Chem
-from rdkit.rdBase import BlockLogs
 from rdkit.Chem import (ForwardSDMolSupplier, MaeMolSupplier, MolFromMol2Block, SmilesMolSupplierFromText,
                         SmilesMolSupplier)
+from rdkit.rdBase import BlockLogs
 from tqdm.auto import tqdm
 
 
@@ -155,24 +155,22 @@ class MolSupplier:
     valid_formats = ('smi', 'mae', 'sd', 'sdf', 'mol', 'mol2')
     valid_compression = ('lzma', 'zlib', 'bz2')
 
-    def __init__(self, source: Union[str, io.TextIOBase, io.BufferedIOBase],
+    def __init__(self,
+                 source: Union[str, io.TextIOBase, io.BufferedIOBase],
                  format: str = None,
-                 compression: str = None, **kwargs):
+                 compression: str = None,
+                 estimate_len: bool = True,
+                 **kwargs):
         f"""Molecular supplier handling format and compression.
         :param source: filename or file-like object;
-                       when using a context manager, file-like objects
-                       are not closed upon exit
-        :param format: data format {self.valid_formats}
-                       can be detected if source is a file name,
-                       must be provided if source is a not file name,
-                       ignored if supplier is not None
-        :param compression: compression type {self.valid_compression}
-                            can be detected if source is a file name,
-                            ignored otherwise
-        :param kwargs: keyworded arguments to be passed to the underlying supplier,
-                       ignored if source is a supplier
-                       can also hold values for 'total' and 'show_progress'
-                       to be considered when used as an iterable
+        when using a context manager, file-like objects are not closed upon exit
+        :param format: data format {self.valid_formats} can be detected if source is a file name,
+        must be provided if source is a not file name, ignored if supplier is not None
+        :param compression: compression type {self.valid_compression} can be detected if source is a file name,
+        ignored otherwise
+        :param estimate_len: should the number of valid molecules in the source be estimated (based on molecule separators)
+        :param kwargs: keyworded arguments to be passed to the underlying supplier, ignored if source is a supplier
+        can also hold values for 'total' and 'show_progress' to be considered when used as an iterable
         """
         # source is None
         if source is None:
@@ -185,6 +183,7 @@ class MolSupplier:
         self.supplier = None  # molecule supplier
         self.compression = None
         self.format = None
+        self.fast_len = estimate_len
         self.kwargs = kwargs  # additional parameters for suppliers
         self._iter_total = self.kwargs.pop('total', None)
         self._iter_progress = self.kwargs.pop('show_progress', None)
@@ -326,7 +325,7 @@ class MolSupplier:
         elif self.format == 'mol2':
             self.supplier = ForwardMol2MolSupplier(self._handle, **self.kwargs)
         # Reset iterator
-        del self._iterator
+        _ = self.__dict__.pop('_iterator', None)
 
     def __len__(self):
         return self.size
@@ -337,8 +336,34 @@ class MolSupplier:
 
     def get_size(self):
         """Obtain the number of molecules."""
+        # Fast access
         if hasattr(self, '_size'):
             return self._size
-        self._size = sum(1 for mol in self if mol is not None)
+        # Save current cursor position
+        cursor_pos = self._handle.tell()
+        # Set handle back to beginning
         self.reset()
+        # Read each molecule if slow length
+        if not self.fast_len:
+            self._size = sum(1 for mol in self if mol is not None)
+        # Approximate size based on delimiters in the underlying handle
+        else:
+            # Determine molecule delimiters
+            if self.format == 'smi':
+                delimiter = b'\n'
+            elif self.format == 'mol2':
+                delimiter = b'@<TRIPOS>MOLECULE'
+            elif self.format in ['sd', 'sdf', 'mol']:
+                delimiter = b'$$$$'
+            elif self.format == 'mae':
+                delimiter = b'f_m_ct'
+            # Read buffers and count delimiters
+            self._size = 0
+            chunksize = 2_097_152  # 2 MB
+            while (len(buffer := self._handle.read(chunksize)) != 0):
+                self._size += buffer.count(delimiter)
+        # Reset internal state
+        self.reset()
+        # Restore previous cursor position
+        self._handle.seek(cursor_pos, 0)
         return self._size
