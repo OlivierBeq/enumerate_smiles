@@ -297,7 +297,7 @@ class SmilesEnumerator:
 
     def _write_results(self, queue: multiprocessing.Queue, out_path: str, progress: bool, total: int):
        if progress:
-           pbar = tqdm(total=total, desc='Enumerating molecules', ncols=80, smoothing=0.0) 
+           pbar = tqdm(total=total, desc='Enumerating molecules', ncols=90, smoothing=0.0)
        with open(out_path, 'w') as oh:
             while True:
                 smiles_list = queue.get()
@@ -334,7 +334,7 @@ class SmilesEnumerator:
             result = itertools.chain.from_iterable(self._enumerator(mol) for mol in molsupplier)
             # Write results to output
             with open(out_file, 'w') as oh:
-                pbar = tqdm(result, desc='Writing to disk', ncols=90) if progress else result
+                pbar = tqdm(result, desc='Writing to disk', ncols=90, smoothing=0.0) if progress else result
                 for smiles, mol_id in pbar:
                     oh.write(f'{smiles}\t{mol_id}\n')
         else:
