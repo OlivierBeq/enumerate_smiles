@@ -1,3 +1,3 @@
 # -*- coding: utf-8 -*-
 
-"""Unit tests for ChemoPy."""
+"""Unit tests for SMILES enumeration."""
