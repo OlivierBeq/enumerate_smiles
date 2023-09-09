@@ -3,7 +3,7 @@
 import itertools
 import multiprocessing
 from functools import partial
-from typing import List, Callable
+from typing import List, Callable, Union
 
 import numpy as np
 from bounded_pool_executor import BoundedProcessPoolExecutor
@@ -309,7 +309,7 @@ class SmilesEnumerator:
 
     def _write_results(self, queue: multiprocessing.Queue, out_path: str, progress: bool, total: int):
        if progress:
-           pbar = tqdm(total=total, desc='Enumerating molecules', ncols=90, smoothing=0.0) 
+           pbar = tqdm(total=total, desc='Enumerating molecules', ncols=90, smoothing=0.0)
        with open(out_path, 'w') as oh:
             while True:
                 smiles_list = queue.get()
@@ -321,7 +321,7 @@ class SmilesEnumerator:
                     pbar.update()
 
     def enumerate_to_file(self,
-                          molsupplier: MolSupplier,
+                          molsupplier: Union[MolSupplier, List[Chem.Mol]],
                           out_file: str,
                           max_in_mols: int = None,
                           njobs: int = -1,
