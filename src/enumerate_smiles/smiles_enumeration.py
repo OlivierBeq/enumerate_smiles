@@ -3,7 +3,7 @@
 import itertools
 import multiprocessing
 from functools import partial
-from typing import List, Callable, Union
+from typing import List, Callable
 
 import numpy as np
 from bounded_pool_executor import BoundedProcessPoolExecutor
@@ -190,7 +190,7 @@ class SmilesEnumerator:
                                                           itertools.islice(tauto_enumerator.Enumerate(mol),
                                                                            self.max_enum_tautomers)
                                                           )
-                                         if mol is not None and tauto is not None]))
+                                         if mol is not None and tauto is not None and self._sanitize(tauto) is not None]))
             # Subsample tautomers
             if self.random_choice_tautomers:
                 # Randomly
@@ -238,51 +238,63 @@ class SmilesEnumerator:
         if self.enum_smiles:
             # Obtain both Kekule and aromatic SMILES
             if self.smiles_type == 'both':
-                mols1 = [(smiles, mol.GetPropsAsDict(includePrivate=True).get('_Name', ''))
-                        for mol in mols
-                        for smiles in list(set(trycatch(Chem.MolToSmiles, mol, doRandom=True, canonical=False, kekuleSmiles=True)
-                                               for _ in range(self.max_enum_smiles)
-                                               ))
-                        if mol is not None and smiles is not None
-                        ]
+                mols1 = set([(smiles, mol.GetPropsAsDict(includePrivate=True).get('_Name', ''))
+                             for mol in mols
+                             for smiles in list(set(trycatch(Chem.MolToSmiles, mol,
+                                                             doRandom=True,
+                                                             canonical=False,
+                                                             kekuleSmiles=True)
+                                                    for _ in range(self.max_enum_smiles)
+                                                    ))
+                             if mol is not None and smiles is not None
+                             ])
                 # Subsample Kekule SMILES
                 if self.max_out_smiles is not None:
-                    mols1 = random.choice(mols1,  min(len(mols), int(self.max_out_smiles / 2)), replace=False).tolist()
-                mols2 = [(smiles, mol.GetPropsAsDict(includePrivate=True).get('_Name', ''))
-                         for mol in mols
-                         for smiles in list(set(trycatch(Chem.MolToSmiles, mol, doRandom=True, canonical=False, kekuleSmiles=False)
-                                                for _ in range(self.max_enum_smiles)
-                                                ))
-                         if mol is not None and smiles is not None
-                        ]
+                    mols1 = random.choice(list(mols1),  min(len(mols), int(self.max_out_smiles / 2)), replace=False).tolist()
+                mols2 = set([(smiles, mol.GetPropsAsDict(includePrivate=True).get('_Name', ''))
+                             for mol in mols
+                             for smiles in list(set(trycatch(Chem.MolToSmiles, mol,
+                                                             doRandom=True,
+                                                             canonical=False,
+                                                             kekuleSmiles=False)
+                                                    for _ in range(self.max_enum_smiles)
+                                                    ))
+                             if mol is not None and smiles is not None
+                             ])
                 # Subsample aromatic SMILES
                 if self.max_out_smiles is not None:
-                    mols2 = random.choice(mols2,  min(len(mols), int(self.max_out_smiles / 2)), replace=False).tolist()
+                    mols2 = random.choice(list(mols2),  min(len(mols), int(self.max_out_smiles / 2)), replace=False).tolist()
                 mols = list(itertools.chain(mols1, mols2))
             # Obtain only Kekule SMILES
             elif self.smiles_type == 'kekule':
-                mols = [(smiles, mol.GetPropsAsDict(includePrivate=True).get('_Name', ''))
-                        for mol in mols
-                        for smiles in list(set(trycatch(Chem.MolToSmiles, mol, doRandom=True, canonical=False, kekuleSmiles=True)
-                                               for _ in range(self.max_enum_smiles)
-                                               ))
-                        if mol is not None and smiles is not None
-                        ]
+                mols = set([(smiles, mol.GetPropsAsDict(includePrivate=True).get('_Name', ''))
+                            for mol in mols
+                            for smiles in list(set(trycatch(Chem.MolToSmiles, mol,
+                                                            doRandom=True,
+                                                            canonical=False,
+                                                            kekuleSmiles=True)
+                                                   for _ in range(self.max_enum_smiles)
+                                                   ))
+                            if mol is not None and smiles is not None
+                            ])
                 # Subsample Kekule SMILES
                 if self.max_out_smiles is not None:
-                    mols = random.choice(mols,  min(len(mols), self.max_out_smiles), replace=False).tolist()
+                    mols = random.choice(list(mols),  min(len(mols), self.max_out_smiles), replace=False).tolist()
             # Obtain only aromatic SMILES
             else:
-                mols = [(smiles, mol.GetPropsAsDict(includePrivate=True).get('_Name', ''))
-                        for mol in mols
-                        for smiles in list(set(trycatch(Chem.MolToSmiles, mol, doRandom=True, canonical=False, kekuleSmiles=False)
-                                               for _ in range(self.max_enum_smiles)
-                                               ))
-                        if mol is not None and smiles is not None
-                        ]
+                mols = set([(smiles, mol.GetPropsAsDict(includePrivate=True).get('_Name', ''))
+                            for mol in mols
+                            for smiles in list(set(trycatch(Chem.MolToSmiles, mol,
+                                                            doRandom=True,
+                                                            canonical=False,
+                                                            kekuleSmiles=False)
+                                                   for _ in range(self.max_enum_smiles)
+                                                   ))
+                            if mol is not None and smiles is not None
+                            ])
                 # Subsample aromatic SMILES
                 if self.max_out_smiles is not None:
-                    mols = random.choice(mols,  min(len(mols), self.max_out_smiles), replace=False).tolist()
+                    mols = random.choice(list(mols),  min(len(mols), self.max_out_smiles), replace=False).tolist()
         else:
             mols = [(Chem.MolToSmiles(mol), mol.GetPropsAsDict(includePrivate=True).get('_Name', ''))
                     for mol in mols
@@ -297,7 +309,7 @@ class SmilesEnumerator:
 
     def _write_results(self, queue: multiprocessing.Queue, out_path: str, progress: bool, total: int):
        if progress:
-           pbar = tqdm(total=total, desc='Enumerating molecules', ncols=90, smoothing=0.0)
+           pbar = tqdm(total=total, desc='Enumerating molecules', ncols=90, smoothing=0.0) 
        with open(out_path, 'w') as oh:
             while True:
                 smiles_list = queue.get()
@@ -309,7 +321,7 @@ class SmilesEnumerator:
                     pbar.update()
 
     def enumerate_to_file(self,
-                          molsupplier: Union[MolSupplier, List[Chem.Mol]],
+                          molsupplier: MolSupplier,
                           out_file: str,
                           max_in_mols: int = None,
                           njobs: int = -1,
