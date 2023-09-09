@@ -337,11 +337,8 @@ class SmilesEnumerator:
         :param chunksize: number of molecules given to each subprocess to enumerate
         :param progress: should progress be displayed
         """
-        # Determine the number of molecules
-        len_supplier = len(molsupplier)
         if max_in_mols is not None:
             molsupplier = itertools.islice(molsupplier, max_in_mols)
-            len_supplier = max_in_mols
         if njobs == 1:
             result = itertools.chain.from_iterable(self._enumerator(mol) for mol in molsupplier)
             # Write results to output
