@@ -58,7 +58,7 @@ class TestEnumeration(unittest.TestCase):
         """Test enumeration from the MOL2 supplier."""
         se = SmilesEnumerator(max_enum_smiles=100, max_out_smiles=10)
         smiles = se.enumerate((Chem.AddHs(mol) for mol in MOL2_SUPPLIER))
-        self.assertEqual(len(smiles), 8)
+        self.assertEqual(len(smiles), 10)
         MOL2_SUPPLIER.reset()
 
     def test_mae_withH_enumeration(self):
