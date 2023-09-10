@@ -7,6 +7,7 @@ from typing import List, Callable, Union
 
 import numpy as np
 from bounded_pool_executor import BoundedProcessPoolExecutor
+from dimorphite_dl import run as dimorphite_run
 from more_itertools import chunked
 from rdkit import Chem
 from rdkit.Chem import MolStandardize
@@ -25,20 +26,24 @@ class SmilesEnumerator:
                  enum_tautomers: bool = True,
                  enum_resonanceforms: bool = True,
                  enum_stereoisomers: bool = True,
+                 enum_protomers: bool = True,
                  enum_smiles: bool = True,
                  max_enum_heterocycles: int = 100,
                  max_enum_tautomers: int = 100,
                  max_enum_resonanceforms: int = 100,
                  max_enum_stereoisomers: int = 100,
+                 max_enum_protomers: int = 100,
                  max_enum_smiles: int = 100,
                  random_choice_heterocycles: bool = True,
                  random_choice_tautomers: bool = True,
                  random_choice_resonanceforms: bool = True,
                  random_choice_stereoisomers: bool = True,
+                 random_choice_protomers: bool = True,
                  max_out_heterocycles: int = 70,
                  max_out_tautomers: int = 125,
                  max_out_resonanceforms: int = 250,
                  max_out_stereoisomers: int = 500,
+                 max_out_protomers: int = None,
                  max_out_smiles: int = 1000,
                  smiles_type: str = 'both',
                  random_state: int = 1234
@@ -58,27 +63,34 @@ class SmilesEnumerator:
             4) a - enumerate stereoisomers from outputs of step 3c
                b - combine outputs of step 3c and 4a
                c - obtain a random subsample
-            5) a - enumerate Kekule and/or aromatic SMILES from outputs of step 4c
+            5) a - enumerate protomer states from outputs of step 4c
+               b - combine outputs of step 4c and 5a
+               c - obtain a random subsample
+            6) a - enumerate Kekule and/or aromatic SMILES from outputs of step 5c
 
         :param enum_heterocycles: enumerate all derived heterocycles
         :param enum_tautomers: enumerate all tautomeric forms
         :param enum_resonanceforms: enumerate resonance forms
         :param enum_stereoisomers: enumerate stereoisomers after having dropped the input stereochemistry
+        :param enum_protomer: enumerate protonation states after having neutralized the molecule
         :param enum_smiles: enumerate SMILES
         :param max_enum_heterocycles: maximum number of heterocycles to sample per molecule
         :param max_enum_tautomers: maximum number of tautomers to sample per molecule
         :param max_enum_resonanceforms: maximum number of resonance forms to sample per molecule
         :param max_enum_stereoisomers: maximum number of stereoisomers to sample per molecule
+        :param max_enum_protomer: maximum number of protonation states to sample per molecule
         :param max_enum_smiles: maximum number of enumerated SMILES to sample per molecule
         :param random_choice_heterocycles: number of heterocycles randomly sampled from the obtained `max_enum_heterocycles`
         :param random_choice_tautomers: number of tautomers randomly sampled from the obtained `max_enum_tautomers`
         :param random_choice_resonanceforms: number of resonance forms randomly sampled from the obtained `max_enum_resonanceforms`
         :param random_choice_stereoisomers: number of stereoisomers randomly sampled from the obtained `max_enum_stereoisomers`
-        :param max_out_heterocycles: maximum number of heterocycles to be sampled per molecule
-        :param max_out_tautomers: maximum number of tautomers to be sampled per molecule
-        :param max_out_resonanceforms: maximum number of resonance forms to be sampled per molecule
-        :param max_out_stereoisomers: maximum number of stereoisomers to be sampled per molecule
-        :param max_out_smiles: maximum number of SMILES to sampled per molecule
+        :param random_choice_protomer: number of protonation states randomly sampled from the obtained `max_enum_protomer`
+        :param max_out_heterocycles: maximum number of sampled heterocycles to be chosen
+        :param max_out_tautomers: maximum number of sampled tautomers to be chosen
+        :param max_out_resonanceforms: maximum number of sampled resonance forms to be chosen
+        :param max_out_stereoisomers: maximum number of sampled stereoisomers to be chosen
+        :param max_out_protomers: maximum number of sampled protonation states to be chosen
+        :param max_out_smiles: maximum number of SMILES to chosen
         :param smiles_type: type of output SMILES: {'kekule', 'aromatic', 'both'}
         :param random_state: random seed for the selection of enumerated SMILES to be returned
         """
@@ -88,20 +100,24 @@ class SmilesEnumerator:
         self.enum_tautomers = enum_tautomers
         self.enum_resonanceforms = enum_resonanceforms
         self.enum_stereoisomers = enum_stereoisomers
+        self.enum_protomers = enum_protomers
         self.enum_smiles = enum_smiles
         self.max_enum_heterocycles = max_enum_heterocycles
         self.max_enum_tautomers = max_enum_tautomers
         self.max_enum_resonanceforms = max_enum_resonanceforms
         self.max_enum_stereoisomers = max_enum_stereoisomers if max_enum_stereoisomers is not None else 2**32
+        self.max_enum_protomers = max_enum_protomers
         self.max_enum_smiles = max_enum_smiles
         self.random_choice_heterocycles = random_choice_heterocycles
         self.random_choice_tautomers = random_choice_tautomers
         self.random_choice_resonanceforms = random_choice_resonanceforms
         self.random_choice_stereoisomers = random_choice_stereoisomers
+        self.random_choice_protomers = random_choice_protomers
         self.max_out_heterocycles = max_out_heterocycles
         self.max_out_tautomers = max_out_tautomers
         self.max_out_resonanceforms = max_out_resonanceforms
         self.max_out_stereoisomers = max_out_stereoisomers
+        self.max_out_protomers = max_out_protomers
         self.max_out_smiles = max_out_smiles
         self.smiles_type = smiles_type
         # Generator
@@ -234,6 +250,26 @@ class SmilesEnumerator:
                 mols = random.choice(mols,  n, replace=False).tolist()
             elif self.max_out_stereoisomers is not None:
                 mols = mols[:self.max_out_stereoisomers]
+        # Obtain enumerated protomer states
+        if self.enum_protomers:
+            # Obtain protomer states
+            mols = list(itertools.chain(mols,
+                                        [self._copy_props(mol, self._sanitize(Chem.MolFromSmiles(protomer)))
+                                         for mol in mols
+                                         for protomer in map(partial(trycatch, lambda x: x),
+                                                             dimorphite_run(trycatch(Chem.MolToSmiles(mol)),
+                                                                            min_ph=-100, max_ph=100,
+                                                                            max_variants=self.max_enum_protomers,
+                                                                            silent=True)
+                                                            )
+                                         if mol is not None and protomer is not None]))
+            # Subsample porotonation states
+            if self.random_choice_protomers:
+                # Randomly
+                n = min(len(mols), self.max_out_protomers) if self.max_out_protomers is not None else len(mols)
+                mols = random.choice(mols, n, replace=False).tolist()
+            elif self.max_out_protomers is not None:
+                mols = mols[:self.max_out_protomers]
         # Obtain enumerated SMILES
         if self.enum_smiles:
             # Obtain both Kekule and aromatic SMILES
