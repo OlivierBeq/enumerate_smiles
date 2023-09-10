@@ -286,7 +286,7 @@ class SmilesEnumerator:
                              ])
                 # Subsample Kekule SMILES
                 if self.max_out_smiles is not None:
-                    mols1 = random.choice(list(mols1),  min(len(mols), int(self.max_out_smiles / 2)), replace=False).tolist()
+                    mols1 = random.choice(list(mols1),  min(len(mols1), int(self.max_out_smiles / 2)), replace=False).tolist()
                 mols2 = set([(smiles, mol.GetPropsAsDict(includePrivate=True).get('_Name', ''))
                              for mol in mols
                              for smiles in list(set(trycatch(Chem.MolToSmiles, mol,
@@ -299,7 +299,7 @@ class SmilesEnumerator:
                              ])
                 # Subsample aromatic SMILES
                 if self.max_out_smiles is not None:
-                    mols2 = random.choice(list(mols2),  min(len(mols), int(self.max_out_smiles / 2)), replace=False).tolist()
+                    mols2 = random.choice(list(mols2),  min(len(mols2), int(self.max_out_smiles / 2)), replace=False).tolist()
                 mols = list(itertools.chain(mols1, mols2))
             # Obtain only Kekule SMILES
             elif self.smiles_type == 'kekule':
